@@ -1,0 +1,32 @@
+name: Keycloak compatibility
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        keycloak: ['26.8.1']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Build and test against matching Keycloak APIs
+        run: mvn -B -ntp -Dkeycloak.version=${{ matrix.keycloak }} clean verify
+      - name: Start matching Keycloak and check provider and mapper registration
+        run: python3 scripts/smoke.py --version '${{ matrix.keycloak }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: keycloak-steam-provider-${{ matrix.keycloak }}
+          path: |
+            target/keycloak-steam-provider-*.jar
+            target/surefire-reports/*.xml
+          if-no-files-found: error
