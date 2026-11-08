@@ -33,8 +33,10 @@ must match. No compatibility claim is made for untested Keycloak versions.
 
 GitHub Actions builds/tests against the matching Keycloak API, boots an isolated
 Keycloak, creates a temporary realm, checks the provider and mapper metadata,
-and exercises a real authorization request up to the Steam redirect. Add versions
-to `.github/workflows/verify.yml` only after validating them. This is testing
+and exercises a real authorization request up to the Steam redirect and its
+cancellation callback. Weekly and manual runs also query the latest official
+release from `keycloak/keycloak` and test it as a compatibility probe in addition
+to 26.8.1. A green probe does not replace real-account acceptance testing. This is testing
 against official Keycloak artifacts/images, not a modification of Keycloak's
 upstream repository. Human Steam sign-in is not automated.
 

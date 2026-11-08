@@ -69,6 +69,8 @@ def main():
                 call('/realms/master/.well-known/openid-configuration')
                 break
             except (urllib.error.URLError, TimeoutError, OSError, http.client.HTTPException):
+                if docker('inspect', '--format', '{{.State.Running}}', name) != 'true':
+                    raise RuntimeError('Test Keycloak stopped during startup')
                 if time.monotonic() > deadline:
                     raise RuntimeError('Test Keycloak did not start')
                 time.sleep(2)

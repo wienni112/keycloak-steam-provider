@@ -49,14 +49,21 @@ public final class SteamIdentityProvider extends AbstractIdentityProvider<Identi
         catch (java.security.NoSuchAlgorithmException e) { throw new IllegalStateException(e); }
     }
     @Override public Object callback(RealmModel realm, AuthenticationCallback callback, EventBuilder event) {
-        return new Endpoint(callback);
+        return new Endpoint(this,callback);
     }
     @Override public Response retrieveToken(KeycloakSession s, FederatedIdentityModel identity) { return Response.noContent().build(); }
     @Override public Response retrieveToken(KeycloakSession s, FederatedIdentityModel identity, UserSessionModel us, UserModel user) { return Response.noContent().build(); }
 
-    public final class Endpoint {
+    @jakarta.ws.rs.ext.Provider
+    @jakarta.enterprise.inject.Vetoed
+    public static final class Endpoint {
+        private final SteamIdentityProvider provider;
+        private final KeycloakSession session;
         private final AuthenticationCallback callback;
-        Endpoint(AuthenticationCallback callback) { this.callback = callback; }
+        Endpoint(SteamIdentityProvider provider, AuthenticationCallback callback) {
+            this.provider=provider;this.session=provider.session;this.callback=callback;
+        }
+        private IdentityProviderModel getConfig() { return provider.getConfig(); }
         @GET public Response respond() {
             try { return handle(SteamAssertion.flatten(session.getContext().getUri().getQueryParameters())); }
             catch (IllegalArgumentException e) { return callback.error(getConfig(),Messages.IDENTITY_PROVIDER_UNEXPECTED_ERROR); }
@@ -68,17 +75,17 @@ public final class SteamIdentityProvider extends AbstractIdentityProvider<Identi
                 var auth = callback.getAndVerifyAuthenticationSession(state);
                 SteamAssertion.require(auth != null,"Missing authentication session");
                 session.getContext().setAuthenticationSession(auth);
-                var attempt = session.singleUseObjects().remove(attemptKey(state));
+                var attempt = session.singleUseObjects().remove(provider.attemptKey(state));
                 SteamAssertion.require(attempt != null,"Expired or already used authentication attempt");
                 long age = Instant.now().getEpochSecond() - Long.parseLong(attempt.get("issuedAt"));
                 SteamAssertion.require(age >= 0 && age <= SteamAssertion.MAX_AGE,"Expired authentication attempt");
                 if ("cancel".equals(params.get("openid.mode"))) return callback.cancelled(getConfig());
                 String steamId = SteamAssertion.validate(params,attempt.get("returnTo"),Instant.now());
-                SteamAssertion.require(verify(params),"Steam rejected the signature");
+                SteamAssertion.require(provider.verify(params),"Steam rejected the signature");
                 String nonceKey = "ggh-steam-nonce:" + digest(params.get("openid.response_nonce"));
                 SteamAssertion.require(session.singleUseObjects().putIfAbsent(nonceKey,SteamAssertion.MAX_AGE + 120),"Replayed Steam response");
                 var identity = new BrokeredIdentityContext(steamId,getConfig());
-                identity.setIdp(SteamIdentityProvider.this);
+                identity.setIdp(provider);
                 identity.setAuthenticationSession(auth);
                 identity.setBrokerUserId(getConfig().getAlias() + "." + steamId);
                 identity.setUsername("steam_" + steamId);
